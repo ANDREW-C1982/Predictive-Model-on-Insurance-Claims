@@ -1,0 +1,600 @@
+---
+title: "HarvardX:PH125.9x Final Capstone-Predictive Model on Insurance Claims"
+author: "Andrew Chikunga"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+ pdf_document: default
+ html_document: default
+  
+---
+##  Background
+
+Recently, there has been an increase in the number of building collapse in Lagos and major cities in Nigeria. Olusola Insurance Company offers a building insurance policy that protects buildings against damages that could be caused by a fire or vandalism, by a flood or storm.
+
+As a Data Analyst,you are to build a predictive model to determine if a building will have an insurance claim during a certain period or not. You will have to predict the probability of having at least one claim over the insured period of the building.
+
+The model will be based on the building characteristics. The target variable, Claim, is a categorical variable with:
+
+1 if the building has at least a claim over the insured period.
+0 if the building doesn’t have a claim over the insured period.
+
+## Problem Statement: 
+
+To build a logistic model that will predict if a building will have an insurance claim or not during a certain period.
+
+
+# 1.Importing Essential Libraries
+
+I will begin by importing our dependencies that we require. The following dependencies are popularly used for data wrangling operations and visualizations. 
+
+
+```{r libraries, echo=FALSE, message=FALSE}
+library(knitr)
+library(tidyverse)
+library(caret)
+library(dslabs)
+library(dplyr)
+library(ggplot2)
+library(matrixStats)
+library(data.table)
+library(lubridate)
+library(lattice)
+library(reshape2)
+library(mice)
+library(DataExplorer)
+library(VIM)
+library(readr)
+```
+
+# 2. Loading the required datasets.
+
+## Train_data set
+
+We start by loading the train_data set  using the code below:
+
+```{r loading train_data,echo=FALSE}
+train_data <- read.csv(("https://github.com/ANDREW-C1982/Predictive-Model-on-Insurance-Claims/raw/master/train_data.csv"), header=T) # loading the train_dataset
+head(train_data) # view the first six lines of the train_data dataset
+```
+
+I will start with using the dim function to print out the dimensionality of our dataframe.
+
+```{r dim,echo=FALSE}
+dim(train_data)
+```
+
+
+I will use the summary() to review the contents and shape of the data.As its name implies, the summarize function reduces a data frame to a summary of just one vector or value. this function  is valuable because it often provides exactly what is needed in terms of summary statistics. 
+
+
+```{r summary function}
+summary(train_data)
+```
+
+Now that I have a general overview of the nature of the data as shown by the statistics above,I will move on to an in depth analysis.
+
+The str method will allows us to know the data type of each variable and factor levels if any.
+
+```{r str,echo=FALSE}
+str(train_data)
+```
+
+The first column represents the Customer ID of each point. From the second to the fourteenth column we have the 13  predictors:
+
+("Customer.Id","YearOfObservation" "Insured_Period","Residential","Building_Painted","Building_Fenced","Garden","Settlement","Building.Dimension","Building_Type","Date_of_Occupancy","NumberOfWindows","Geo_Code"). and finally in the last column we have the binary response variable ("Claim").   
+  
+With the str() function, we can conclude the dataset has 7160 observations of  14 variables.
+
+
+## variable definations
+
+Customer Id:	Identification number for the Policy holder.
+
+YearOfObservation:	year of observation for the insured policy.
+
+Insured_Period:	duration of insurance policy in Olusola Insurance. (Ex: Full year insurance, Policy Duration = 1; 6 months = 0.5).
+
+Residential:	is the building a residential building or not.
+
+Building_Painted:	is the building painted or not (N-Painted, V-Not Painted).
+
+Building_Fenced:is the building fence or not (N-Fenced, V-Not Fenced).
+
+Garden	building: has garden or not (V-has garden; O-no garden).
+
+Settlement	Area: where the building is located. (R- rural area; U- urban area).
+
+Building Dimension:	Size of the insured building in m2.
+
+Building_Type:	The type of building (Type 1, 2, 3, 4).
+
+Date_of_Occupancy:	date building was first occupied.
+
+NumberOfWindows:	number of windows in the building.
+
+Geo Code:	Geographical Code of the Insured building.
+
+Claim	target variable: (0: no claim, 1: at least one claim over insured period).
+
+# 3.Exploratory Data Analysis
+
+Data Exploration is one of the most significant portions of the machine learning process. Clean data can ensure a notable increase in accuracy of our model. No matter how powerful our model is, it cannot function well unless the data we provide it has been thoroughly processed. This step will briefly take you through this step and assist me to visualize the data, find relation between variables, deal with missing values and outliers and assist in getting some fundamental understanding of each variable I will use. Moreover, this step will also enable me to figure out the most important attibutes to feed my model and discard those that have no relevance.
+
+I will begin the data cleaning by checking if the data observations have any missing values:
+
+## Missing values
+
+```{r missing values,echo=FALSE}
+# check for missing values
+table (complete.cases (train_data))
+```
+
+
+The above code snippet indicates that 610 sample cases have NA values.In order to fix this, let’s look at the summary of all our variables and analyze which variables have the greatest number of null values.The mice package provides a nice function md.pattern() to get a better understanding of the pattern of missing data.
+
+
+```{r md pattern}
+md.pattern(train_data)
+```
+
+
+The output  tells us that 6550 samples are complete while it is observed that two variables have a good amount of NA values: 
+Date_of_Occupancy –504,Building.Dimension – 102 & 4 samples missing under  Date_of_Occupancy and Building.Dimension are uninterpretable.
+The reason why we must get rid of missing values is that they lead to wrongful predictions and hence decrease the accuracy of our model.
+
+## summary of missing values
+
+```{r Vim}
+aggr_plot <- aggr(train_data, col=c('navyblue','red'), numbers=TRUE, sortVars=TRUE, labels=names(train_data), cex.axis=.7, gap=3, ylab=c("Histogram of missing data","Pattern"))
+```
+
+The plot helps us understanding that almost 91.4% of the samples are not missing any information, 7.1% are missing Date_of_Occupancy value, and 1.5% are missing Building.Dimension. Through this approach the situation looks a bit clearer in my opinion.This also tells us that our dataset is of good quality.
+
+
+```{r removing NAs,echo=FALSE}
+train_data <-na.omit(train_data) # removing missing values
+```
+
+
+# Visualising distributions:Outlier Analysis or Clustering:
+
+
+```{r outliers,echo=FALSE}
+boxplot(train_data,outcol = "red",main = "features with outliers",col = "salmon", outcex = 1.5) # checking for outliers using box plots
+```
+
+Using the boxplots above,it is straightforward that the [Building Dimension] variable has visible outliers.I am going to remove the ouliers using the code below.
+
+# Removing the outliers on the Building.Dimension data variable
+
+
+```{r Building Dimension outliers}
+Q <- quantile(train_data$Building.Dimension, probs=c(.25, .75), na.rm = FALSE)
+iqr <- IQR(train_data$Building.Dimension) # Interquartile range
+up <-  Q[2]+1.5*iqr # Upper Range
+low<- Q[1]-1.5*iqr # Lower Range
+new_train <- subset(train_data, Building.Dimension > (Q[1] - 1.5*iqr) & Building.Dimension < (Q[2]+1.5*iqr)) # removing the outlier below 25% and above 75%
+boxplot(new_train,outcol = "red",main = "features without outliers",col ="salmon", outcex = 1.5) # box plot after removing main outlier
+```
+
+
+# Investigating variability in all the features of train_data Dataset
+
+## Continous variables
+
+A variable is continuous if it can take any of an infinite set of ordered values. residential,Building.Dimension,Building type and Date_of_Occupancy examples of continuous variables. To examine the distribution of a continuous variable, I will use a histogram:
+
+##  Histogram for  Building.Dimension 
+
+The data still has a big spike on Dimensions below 50 square meters.I am going to remove all dimension below 50 by using the code below.Please note building regulation in nigeria prescribes that industrial buildings should be atleast 60 square metres while residential is 50 square metres.
+
+```{r Building.Dimension}
+new_train<-new_train%>%
+filter(Building.Dimension > 50)
+qplot(data = new_train, x = Building.Dimension,bins=50,main="Bar plot for building.dimension distribution",colour="red") + ylab("Count")    
+```
+
+The data is now left skewed suggesting that the median value is greater than the mean.Furthur cleaning is necessary on this variable.
+
+## Histogram for Insured_period
+
+
+```{r Insured_Period,echo=FALSE}
+qplot(data = new_train, x = Insured_Period,main="Bar plot for Insured_Period distribution",colour="red",width=0.7) + ylab("count")
+```
+
+From the distribution above,the number of buildings that were insured for the whole year are significantly higher.This variable indeed shows that it is less significant in affecting the target variable. There is a sizeable number of insured_periods that did not even last a month.I will remove these observations as they are not significant in this study.
+
+
+```{r insured_period_outlier}
+new_train<-new_train%>%
+filter(Insured_Period > 0.1)
+qplot(data = new_train, x = Insured_Period,main="Bar plot for Insured_Period distribution",colour="red") + ylab("count")
+```
+
+## Histogram for Date_of_Occupancy
+
+
+```{r date_of_accupancy,echo=FALSE}
+qplot(data = new_train, x = Date_of_Occupancy,main="Bar plot for Date_of_Occupancy distribution",colour="red") + ylab("count")
+```
+
+
+There are almost zero houses between 1500 and 1900.This could be because houses of this period are either dilpailated or of little value to insure.I am going to remove all houses that are less than the year 1900 with the code below:
+
+
+`````{r date_accupancy outlier}
+new_train<-new_train%>%
+filter(Date_of_Occupancy >=1900)
+qplot(data = new_train, x = Date_of_Occupancy,bins=50,main="Bar plot for Date_of_Occupancy distribution",colour="red") + ylab("count")
+````
+
+This variable shows little spikes with no definate pattern in occuring.In my own,the variable is significant in building this model.
+
+
+## Categorical Variables
+
+A variable is categorical if it can only take one of a small set of values. In R, categorical variables are usually saved as factors or character vectors. To examine the distribution of a categorical variable, use a bar chart:The height of the bars displays how many observations occurred with each x value.
+
+## Bar graph showing the NumberOfWindows.
+
+
+```{r Numberofwindows,echo=FALSE}
+ggplot(data=new_train, aes(x=NumberOfWindows, y=Claim, fill=Claim)) + geom_bar(stat="identity") + labs(title="Plot of NumberOfWindows per Claim")
+```
+
+
+The character "." is the most appearing value in the NumberOfWindows feature.statistically it does not make sense to treat them as missing values as this will seriously alter the quality of the data.In my own opinion, I am going to replace this character with zero values suggesting buildings without windows using the following code:
+
+The category zero has twice the number of buildings with the second most appearing.This category tells us this type of buildings constructed in Nigeria therefore it is significant in interpreting the model.
+ 
+## Bar graph showing year of Observation
+
+
+```{r YearOfObservation ,echo=FALSE}
+ggplot(data=new_train, aes(x=YearOfObservation, y=Claim, fill=Claim)) + geom_bar(stat="identity",width = 0.5) + labs(title="Plot of YearOfObservation  per Claim")
+
+```
+
+
+Most observations were done in 2012 and 2013.
+
+
+## Bar graph showing type of Residential
+
+
+```{r Residential,echo=FALSE}
+ggplot(data=new_train, aes(x=Residential, y=Claim, fill=Claim)) + geom_bar(stat="identity",width = 0.2) + labs(title="Plot of Residential  per Claim")
+```
+ 
+More buildings in this dataset are residential buildings represnted by 0.
+ 
+## Bar graph showing number of Buildings painted or not
+ 
+```{r painted,echo=FALSE}
+ggplot(data=new_train, aes(x=Building_Painted, y=Claim, fill=Claim)) + geom_bar(stat="identity",width = 0.2) + labs(title="Plot of Building_Painted  per Claim")
+```
+ 
+ More buildings in this dataset are not painted.
+ 
+## Bar graph showing number of Buildings fenced or not
+ 
+```{r fenced,echo=FALSE}
+ggplot(data=new_train, aes(x=Building_Fenced, y=Claim, fill=Claim)) + geom_bar(stat="identity",width = 0.2) + labs(title="Plot of Building_Fenced per Claim")
+```
+ 
+The bar graph shows that there are more Buildings that are fenced than not
+ 
+## Bar graph showing number of Buildings with gardens or not.
+
+
+```{r garden,echo=FALSE}
+ggplot(data=new_train, aes(x=Garden, y=Claim, fill=Claim)) + geom_bar(stat="identity",width = 0.3) + labs(title="Plot of Garden per Claim")
+```
+
+ More buildings in this dataset do not have gardens.
+ 
+## Bar graph showing the settlement type. 
+ 
+```{r Settlement,echo=FALSE }
+ggplot(data=new_train, aes(x=Settlement , y=Claim, fill=Claim)) + geom_bar(stat="identity",width = 0.2) + labs(title="Plot of Settlement per Claim")
+```
+
+More buildings in this dataset are from rural areas.
+
+## Bar graph showing type of building.
+ 
+```{r bulding type,echo=FALSE}
+ggplot(data=new_train, aes(x=Building_Type, y=Claim, fill=Claim)) + geom_bar(stat="identity",width = 0.4) + labs(title="Plot of Building_Type per Claim")
+```
+ 
+We have 4 types of buldings with the majority of buildings being type 2.
+
+Interpreting all the categorical variables above,it is clear that we more number of no claims than claims.
+
+## Transforming data into numeric
+
+I am going to transform the data it to numeric data type since it'll be more handy to use for the functions ahead.
+
+Another important point to note. When converting a factor to a numeric variable, you should always convert it to character and then to numeric, else, the values can get screwed up,however this dataset is mixed data types,so i will just convert it to numeric.
+
+
+```{r numeric factors,echo=FALSE}
+new_train <-sapply(new_train,as.numeric)
+```
+
+```{r dataframe coversion,echo=FALSE}
+new_train <-as.data.frame(new_train)
+```
+
+```{r introduce}
+introduce(new_train)
+```
+
+As we can observe, there are no missing values left in the dataframe.
+
+
+We'll now move on to multi-variate analysis of our variables and draw a correlation heat map from DataExplorer library. 
+
+## Heatmap
+
+We'll now move on to multi-variate analysis of our variables and draw a correlation. The heatmap will enable us to find out the correlation between each variable. We are more interested in to find out the correlation between our predictor attributes with the target attribute Claim. The color scheme depicts the strength of correlation between 2 variables.
+
+This will be a simple way to quickly find out how much an impact a variable has on our final outcome. There are other ways as well to figure this out.
+
+```{r heatmap}
+plot_correlation(na.omit(new_train), maxcat = 5L) 
+```
+
+We can observe the week correlation of Customer.Id,YearOfObservation, Building_Panted and Date_of_Occupancy  with our target variable.
+
+
+Now let's have a univariate analysis of our variables. We'll start with the categorical variables and have a quick check on the frequency of distribution of categories. The code below will allow us to observe the required graphs. 
+
+```{r plot histograms}
+plot_histogram(new_train)
+```
+
+The distribution above shows that most variables are moderately normal.This is a good indication about the predictor power of our variables.
+
+
+# 4.Feature Engineering
+
+This step can be more important than the actual model used because a machine learning algorithm only learns from the data we give it, and creating features that are relevant to a task is absolutely crucial.
+
+Analyzing our data above, we've been able to note the extremely weak correlation of some variables with the final target variable. The following are the ones which have significantly low correlation values:Customer.Id,YearOfObservation,Building_Painted,Date_of_Occupancy,Building_Fenced,Garden,Settlement,Geo_Code.
+
+
+```{r weak correlation,echo=FALSE}
+#drop columns with weak correlation
+data <- data.frame(Insured_Period=new_train$Insured_Period,Residential=new_train$Residential,
+Building.Dimension=new_train$Building.Dimension,Building_Type=new_train$Building_Type,NumberOfWindows=new_train$NumberOfWindows)
+```
+
+
+# 5.Standardization
+
+In statistics, standardization is the process of putting different variables on the same scale. This process allows you to compare scores between different types of variables. Typically, to standardize variables, you calculate the mean and standard deviation for a variable. Then, for each observed value of the variable, you subtract the mean and divide by the standard deviation.
+
+This process produces standard scores that represent the number of standard deviations above or below the mean that a specific observation falls. For instance, a standardized value of 2 indicates that the observation falls 2 standard deviations above the mean. This interpretation is true regardless of the type of variable that you standardize.
+
+The target should not be standardized in this case as it is already in zeros' and ones.
+
+```{r Standardization}
+data <-scale(data)
+head(data)
+```
+
+```{r coverting to dataframe,echo=FALSE}
+data <-as.data.frame(data)
+```
+
+```{r concaneting the claim variable}
+new_data <-mutate(data,new_train$Claim)
+```
+
+```{r renaming claim}
+colnames(new_data)[6] <- "Claim"
+new_data$Claim <-as.factor(new_data$Claim)
+head(new_data)
+```
+
+# 6.Create training and testing sets
+
+I will train our model using the fit method with training_data that cointants 70%  and testing_data  that contain 30% of our dataset. This will be a binary classification model.
+
+
+```{r ctreating spliting,echo=FALSE,message=FALSE}
+# testing set will be 30% of new_data
+# if using R 3.5 or earlier, use `set.seed(1)` instead
+test_index <- createDataPartition(y = new_data$Claim, times = 1, p = 0.3, list = FALSE)
+training_data <- new_data[-test_index,]
+testing_data <- new_data[test_index,]
+```
+
+# 7. Fitting Logistic Regression Model
+
+Why not linear regression?
+
+When the response variable has only 2 possible values, it is desirable to have a model that predicts the value either as 0 or 1 or as a probability score that ranges between 0 and 1.
+Linear regression does not have this capability. Because, If you use linear regression to model a binary response variable, the resulting model may not restrict the predicted Y values within 0 and 1.
+
+In short, Logistic Regression is used when the dependent variable(target) is categorical. For example:
+1. To predict whether an email is spam (1) or not spam (0)
+2. Whether the tumor is malignant (1) or not (0)
+
+It is named as ‘Logistic Regression’, because it’s underlying technique is quite the same as Linear Regression. There are structural differences in how linear and logistic regression operate. Therefore, linear regression isn't suitable to be used for classification problems. 
+The logistic or logit transformation for a proportion or rate $p$ is defined as:
+$f(p) = \log \left( \frac{p}{1-p} \right)=$
+When $p$ is a proportion or probability, the quantity that is being logged $p/(1-p)$ is called the odds.Its name is derived from one of the core functions behind its implementation called the logistic function or the sigmoid function. It’s an S-shaped curve that can take any real-valued number and map it into a value between 0 and 1, but never exactly at those limits.
+
+The Sigmoid function in mathematics is defined as:
+
+```{r Sigmoid function}
+sigmoid = function(x) {
+   1 / (1 + exp(-x))}
+# you can use the equal sign as well, the programmer way.
+x <- seq(-5, 5, 0.01)
+plot(x, sigmoid(x), col='blue')
+```
+
+## Checking the accuracy of the model using train data:
+
+So, after evaluating all our predictor variables, it is finally time to perform Predictive analytics. In this stage, we’ll build a predictive model that will predict whether an individual Claims or not based on the predictor variables that we evaluated in the previous section.
+
+To build this model I’ve made use of the glm method since we have to classify an outcome into either of the two classes, i.e: Claim or not:
+
+I am also going to encode the response variable into a factor variable of 1's and 0's. Though, this is only an optional step.So whenever the Class is Claim, it will be 1 else it will be 0. Then, I am converting it into a factor.
+
+```{r factors}
+training_data$Claim <- factor(training_data$Claim,levels=c(0,1))
+testing_data$Claim <- factor(testing_data$Claim,levels=c(0,1))
+```
+
+The response variable Claim is now a factor variable and all other columns are numeric.
+
+```{r train,echo=FALSE,message=FALSE}
+training_glm  = train (Claim ~. , method = "glm", data = training_data)
+```
+
+To evaluate the accuracy of the model, we’re going to use a confusion matrix:
+
+
+```{r confusion matrix}
+confusionMatrix (training_data$Claim, predict (training_glm, training_data))
+```
+
+
+The output shows that our model calculates the income level of an individual with an accuracy of approximately 79%, which is a good number to begin with.
+
+
+## Building the model
+
+In this section of predicting insurance claims , I will fit my  model.A logistic regression is used for modeling the outcome probability of a class such as pass/fail, positive/negative and in our case – Claim/no Claim. I will proceed to implement this model on our test data as follows –
+
+
+```{r build}
+log.model <- glm(Claim ~., data = training_data, family = binomial)
+```
+
+
+## Summary of the model
+
+```{r summary of the model}
+summary(log.model)
+```
+
+Four predictor variables have p-values > than 0.05,implying that they are statistically insificant.These values had a significant low correlation but it makes sense for me to keep them as realistically they do have an effect on  the target variable and more so we cannot just drop  variables due to high p-values without further investigation.
+
+
+```{r plot_log}
+plot(log.model)
+```
+
+## Validate the model
+
+So far, we used the training data set to build the model, now its time to validate the model by using the testing data set.
+The test data set is applied to the predictive model to validate the efficiency of the model. The following code snippets shows how this is done:
+
+
+# 8. How to Predict on Testing Dataset
+
+The log.model is now built.I will use it to predict the response on testing_data.
+
+
+```{r pred}
+pred <- predict(log.model, newdata = testing_data, type = "response")
+```
+
+Now, pred contains the probability that the observation is malignant for each observation.
+Note that, when you use logistic regression, you need to set type='response' in order to compute the prediction probabilities. 
+
+# Recode factors
+
+If the probability of Y is > 0.5, then it can be classified an event.
+So if pred is greater than 0.5, it is Claim else it is No Claim.
+
+```{r recode}
+y_pred_num <- ifelse(pred > 0.5, 1, 0)
+y_pred <- factor(y_pred_num)
+y_act <- testing_data$Claim
+```
+
+# Accuracy
+
+```{r accuracy_1}
+mean(y_pred == y_act) #81% 
+```
+
+I will try to improve the accuracy improving the  inbalance between the two classes:Claim having 1200 values and no Claim having 4533 values as shown below:
+
+```{r inbalance check}
+table(training_data$Claim)
+```
+
+# 9.Improving model accuracy by handling Class Imbalance with Upsampling.
+
+Since the response variable is a binary categorical variable, you need to make sure the training data has approximately equal proportion of classes.
+
+This concern is normally handled with a couple of techniques called:
+a. Down Sampling
+b. Up Sampling
+c. Hybrid Sampling using
+
+However for this project, I will use up sampling.in UpSampling, rows from the minority class, that is, Claim is repeatedly sampled over and over till it reaches the same size as the majority class (No Claim)
+
+```{r upScaling,message=FALSE}
+'%ni%' <- Negate('%in%')  # define 'not in' func
+set.seed(100)
+up_train <- upSample(x = training_data[, colnames(training_data) %ni% "Claim"],
+y = (training_data$Claim))
+table(up_train$Class)
+```
+
+
+As expected, Claim and no Clain values are now in the same ratio.
+
+## The model:
+
+
+```{r the_model}
+up_log.model <- glm(Class ~., family = "binomial", data=up_train)
+summary(up_log.model)
+```
+
+```{r table upscaling,message=FALSE}
+up_scale_pred <- predict(up_log.model, newdata = testing_data, type = "response")
+```
+
+
+## Up scale Accuracy
+
+
+```{r up scale_accuracy}
+up_scale_pred_num <- ifelse(up_scale_pred > 0.5, 1, 0)
+up_scale_pred <- factor(up_scale_pred_num, levels=c(0, 1))
+up_scale_act <- testing_data$Claim
+mean(up_scale_pred == up_scale_act) 
+```
+
+In order to assess the performance of our model, we will delineate the ROC curve. ROC is also known as Receiver Optimistic Characteristics. For this, we will first import the ROC package and then plot our ROC curve to analyze its performance.
+
+
+```{r ROC}
+library(pROC)
+lr.predict <- predict(up_log.model,up_train, probability = TRUE)
+auc.gbm = roc(up_train$Class, lr.predict, plot = TRUE, col = "blue")
+```
+
+# 9. Conclusion
+
+Logistic regression is a powerful tool, especially in epidemiologic studies,financial modelling and social sciences allowing multiple explanatory variables being analyzed simultaneously, meanwhile reducing the effect of confounding factors. However, researchers must pay attention to model building, avoiding just feeding software with raw data and going forward to results. 
+
+Building the model and classifying the Y is only half work done because, the scope of evaluation metrics to judge the efficacy of the model is vast and requires careful judgement to choose the right model. For this project,I only used logistic model as an  ML technique,however they are various models that can be used to fit this data such as Gradient Boosting (GBM),Artificial Neural Network,Random forests and KNN techniques.
+
+# 10. References
+
+1. https://data-flair.training/blogs
+2. https://rafalab.github.io/dsbook/large-datasets
+3. https://zindi.africa/competitions
+
